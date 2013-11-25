@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"time"
+	"strconv"
 )
 
 type In struct {
@@ -37,8 +38,9 @@ func (*In) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 }
 
 func (*In) Write(fid *srv.FFid, data []byte, offset uint64) (int, error) {
-	addr := fid.Fid.Fconn.RemoteAddr().String()
-	chat = append(chat, addr...)
+	//addr := fid.Fid.Fconn.RemoteAddr().String()
+	//user := p.OsUsers.Uid2User(os.Geteuid())
+	chat = append(chat, strconv.FormatInt(int64(fid.Fid.User.Id()), 10)...)
 	chat = append(chat, " > "...)
 	chat = append(chat, data...)
         return len(data), nil
