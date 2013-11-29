@@ -11,6 +11,7 @@ The fs looks like this
     /circles/work
              familly
   	     friends
+    
 
 The fs maintains his own list of know users (go9p supports that)
 Authentification is done with rsa keys.
