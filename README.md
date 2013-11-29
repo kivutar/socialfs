@@ -10,7 +10,7 @@ The fs looks like this
            #socialfs
     /circles/work
              familly
-  	     friends
+             friends
     /status 
 
 The fs maintains his own list of know users (go9p supports that).
