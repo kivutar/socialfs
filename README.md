@@ -3,14 +3,14 @@ Spec
 
 The fs looks like this
 
-  /public
-  /private
-  /contacts
-  /chans/#9me
-         #socialfs
-  /circles/work
-           familly
-	   friends
+    /public
+    /private
+    /contacts
+    /chans/#9me
+           #socialfs
+    /circles/work
+             familly
+  	   friends
 
 The fs maintains his own list of know users (go9p supports that)
 Authentification is done with rsa keys.
