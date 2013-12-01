@@ -33,3 +33,10 @@ First:
   * Learn how to use factotum
   * Manage users and permissions
   * Treat user as admin if his private key match the server certificate (is it the right way?)
+
+Worth reading
+=============
+
+ * http://plan9.bell-labs.com/wiki/plan9/Using_ssl/index.html
+ * https://groups.google.com/d/topic/golang-nuts/Fbs4ZHXMyE0/discussion
+ * http://www.g-loaded.eu/2005/11/10/be-your-own-ca/
