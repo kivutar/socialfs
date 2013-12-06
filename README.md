@@ -29,7 +29,6 @@ The rights on the files and folders are different depending if you are mounting 
 
 First:
 
-  * TLS is not working, and I don't understand why
   * Learn how to use factotum
   * Manage users and permissions
   * Treat user as admin if his private key match the server certificate (is it the right way?)
