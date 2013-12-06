@@ -40,6 +40,7 @@ Worth reading
  * http://plan9.bell-labs.com/wiki/plan9/Using_ssl/index.html
  * https://groups.google.com/d/topic/golang-nuts/Fbs4ZHXMyE0/discussion (this guy were right, I signed my certificates with my own CA and now it works)
  * http://www.g-loaded.eu/2005/11/10/be-your-own-ca/
+ * http://mirtchovski.com/p9/py9p/
 
 An exemple of p9sk authentication:
  * http://www.www.9paste.net/qrstuv/factotum.go a factotum lib to communicate with factotum
