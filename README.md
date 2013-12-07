@@ -24,8 +24,8 @@ The rights on the files and folders are different depending if you are mounting 
  * _circles/_ is used to manage circles of contacts. Use touch to create a new circle. Writing to a circle could be redirected to each _private_ of your contacts belonging to this circle. But I don't know if it is a good idea yet. Also, reading a circle could return a merge of all your contact's _public_ (only their own messages though)
  * _status_ is used to share your status with others. You can write to it if you've mounted your own socialfs, and everybody can read it.
 
- TODO
- ====
+TODO
+====
 
 First:
 
