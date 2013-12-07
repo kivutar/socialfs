@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"io"
+	"time"
 )
 
 type Chat struct {
@@ -72,8 +73,10 @@ func (f *Chat) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 
 func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 
-	ind := []byte(fid.Fid.Fconn.Id)
-	ind = append(ind, " > "...)
+	ind := []byte(time.Now().Format(time.RFC3339))
+	ind = append(ind, " "...)
+	ind = append(ind, fid.Fid.Fconn.Id...)
+	ind = append(ind, " → "...)
 
 	n1, e1 := f.file.WriteAt(ind, int64(offset))
 	if e1 != nil {
