@@ -72,9 +72,17 @@ func (f *Chat) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 
 func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 
-	n, e := f.file.WriteAt(buf, int64(offset))
-	if e != nil {
-		log.Println(fmt.Sprintf("Error: %s", e))
+	ind := []byte(fid.Fid.Fconn.Id)
+	ind = append(ind, " > "...)
+
+	n1, e1 := f.file.WriteAt(ind, int64(offset))
+	if e1 != nil {
+		log.Println(fmt.Sprintf("Error: %s", e1))
+	}
+
+	n2, e2 := f.file.WriteAt(buf, int64(offset) + int64(n1))
+	if e2 != nil {
+		log.Println(fmt.Sprintf("Error: %s", e2))
 	}
 
 	st, e := os.Lstat(f.Name)
@@ -84,7 +92,7 @@ func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 	f.Length = uint64(st.Size())
 	f.Mtime = uint32(st.ModTime().Unix())
 
-	return n, nil
+	return n2, nil
 }
 
 func main() {
