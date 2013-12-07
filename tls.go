@@ -4,7 +4,7 @@ package main
 import (
 	"code.google.com/p/go9p/p"
 	"code.google.com/p/go9p/p/clnt"
-	//"crypto/rand"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
@@ -26,25 +26,26 @@ func main() {
 	clnt.DefaultDebuglevel = *debuglevel
 
 	certpool := x509.NewCertPool()
-	pem, err := ioutil.ReadFile("/home/kivutar/server2.cert")
+	pem, err := ioutil.ReadFile("server.crt")
 	success := certpool.AppendCertsFromPEM(pem)
 	if ! success {
 		log.Println("can't parse cert pool")
 		return
 	}
 
-	cert, err := tls.LoadX509KeyPair("/home/kivutar/client3.cert", "/home/kivutar/client3.privkey")
+	cert, err := tls.LoadX509KeyPair("client.crt", "client.key")
 	if err != nil {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
 	}
 
 	c, oerr := tls.Dial("tcp", *addr, &tls.Config{
-		//Rand:               rand.Reader,
+		ServerName:         "localhost",
+		Rand:               rand.Reader,
 		Certificates:       []tls.Certificate{cert},
-		//CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
-		RootCAs:            certpool,         
-		InsecureSkipVerify: true,
+		CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA},
+		RootCAs:            certpool,
+		InsecureSkipVerify: false,
 	})
 	if oerr != nil {
 		log.Println("can't dial", oerr)

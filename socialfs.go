@@ -10,102 +10,81 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"io"
 )
 
 type Chat struct {
 	srv.File
-	data [][]byte
+	file *os.File
 }
 
-var addr = flag.String("addr", "localhost:5640", "network address")
+var addr = flag.String("addr", ":5640", "network address")
 var debug = flag.Bool("d", false, "print debug messages")
 var debugall = flag.Bool("D", false, "print packets as well as debug messages")
 
-var blkchan = make(chan []byte, 2048)
-
 var s *srv.Fsrv
 
+func omode2uflags(mode uint8) int {
+	ret := int(0)
+	switch mode & 3 {
+	case p.OREAD:
+		ret = os.O_RDONLY
+		break
+
+	case p.ORDWR:
+		ret = os.O_RDWR
+		break
+
+	case p.OWRITE:
+		ret = os.O_WRONLY
+		break
+
+	case p.OEXEC:
+		ret = os.O_RDONLY
+		break
+	}
+
+	if mode&p.OTRUNC != 0 {
+		ret |= os.O_TRUNC
+	}
+
+	return ret
+}
+
+func (f *Chat) Open(fid *srv.FFid, mode uint8) (error) {
+
+	var e error
+
+	f.file, e = os.OpenFile(f.Name, omode2uflags(mode)|os.O_CREATE, 0666)
+
+	return e
+}
+
 func (f *Chat) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
-	f.Lock()
-	defer f.Unlock()
 
-	if offset > f.Length {
-		return 0, nil
-	}
-
-	count := uint32(len(buf))
-	if offset+uint64(count) > f.Length {
-		count = uint32(f.Length - offset)
-	}
-
-	for n, off, b := offset/uint64(8192), offset%uint64(8192), buf[0:count]; len(b) > 0; n++ {
-		m := 8192 - int(off)
-		if m > len(b) {
-			m = len(b)
-		}
-
-		blk := make([]byte, 8192)
-		if len(f.data[n]) != 0 {
-			blk = f.data[n]
-		}
-
-		copy(b, blk[off:off+uint64(m)])
-		b = b[m:]
-		off = 0
+	count, e := f.file.ReadAt(buf, int64(offset))
+	if e != nil && e != io.EOF {
+		log.Println(fmt.Sprintf("Error: %s", e))
 	}
 
 	return int(count), nil
 }
 
 func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
-	f.Lock()
-	defer f.Unlock()
 
-	sz := offset + uint64(len(buf))
-	if f.Length < sz {
-		f.expand(sz)
+	n, e := f.file.WriteAt(buf, int64(offset))
+	if e != nil {
+		log.Println(fmt.Sprintf("Error: %s", e))
 	}
 
-	count := 0
-	for n, off := offset/uint64(8192), offset%uint64(8192); len(buf) > 0; n++ {
-		log.Println(n)
-		blk := f.data[n]
-		if len(blk) == 0 {
-
-			select {
-			case blk = <-blkchan:
-				break
-			default:
-				blk = make([]byte, 8192)
-			}
-
-			copy(blk, make([]byte, 8192))
-
-			f.data[n] = blk
-		}
-
-		m := copy(blk[off:], buf)
-		buf = buf[m:]
-		count += m
-		off = 0
+	st, e := os.Lstat(f.Name)
+	if e != nil {
+		log.Println(fmt.Sprintf("Error: %s", e))
 	}
+	f.Length = uint64(st.Size())
+	f.Mtime = uint32(st.ModTime().Unix())
 
-	return count, nil
-}
-
-func (f *Chat) expand(sz uint64) {
-	blknum := sz / uint64(8192)
-	if sz%uint64(8192) != 0 {
-		blknum++
-	}
-
-	data := make([][]byte, blknum)
-	if f.data != nil {
-		copy(data, f.data)
-	}
-
-	f.data = data
-	f.Length = sz
+	return n, nil
 }
 
 func main() {
@@ -121,7 +100,14 @@ func main() {
 	}
 
 	public := new(Chat)
-	err = public.Add(root, "public", p.OsUsers.Uid2User(os.Geteuid()), nil, 0666, public)
+	err = public.Add(root, "public", user, nil, 0666, public)
+	if err != nil {
+		log.Println(fmt.Sprintf("Error: %s", err))
+		return
+	}
+
+	private := new(Chat)
+	err = private.Add(root, "private", user, nil, 0222, private)
 	if err != nil {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
@@ -138,7 +124,7 @@ func main() {
 	}
 
 	/*certpool := x509.NewCertPool()
-	pem, err := ioutil.ReadFile("/home/kivutar/client3.cert")
+	pem, err := ioutil.ReadFile("client.crt")
 	success := certpool.AppendCertsFromPEM(pem)
 
 	if ! success {
@@ -146,7 +132,7 @@ func main() {
 		return
 	}
 
-	cert, err := tls.LoadX509KeyPair("/home/kivutar/server2.cert", "/home/kivutar/server2.privkey")
+	cert, err := tls.LoadX509KeyPair("test.crt.pem", "test.key.pem")
 	if err != nil {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
@@ -155,10 +141,10 @@ func main() {
 	ls, oerr := tls.Listen("tcp", *addr, &tls.Config{
 		//Rand:               rand.Reader,
 		Certificates:       []tls.Certificate{cert},
-		//CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
-		//ClientAuth:         tls.RequireAndVerifyClientCert,
-		//ClientCAs:          certpool,
-		InsecureSkipVerify: true,
+		CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
+		ClientAuth:         tls.RequireAndVerifyClientCert,
+		ClientCAs:          certpool,
+		InsecureSkipVerify: false,
 		//PreferServerCipherSuites: true,
 	})
 	if oerr != nil {
