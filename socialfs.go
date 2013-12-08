@@ -65,9 +65,9 @@ func (f *Chat) Open(fid *srv.FFid, mode uint8) (error) {
 		break
 	}
 
-	var e
-	f.file, e = os.OpenFile(f.Name, uflag, 0666)
-	return e
+	var err error
+	f.file, err = os.OpenFile(f.Name, uflag, 0666)
+	return err
 }
 
 func (f *Chat) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
@@ -119,9 +119,9 @@ func (f *Status) Open(fid *srv.FFid, mode uint8) (error) {
 		break
 	}
 
-	var e
-	f.file, e = os.OpenFile(f.Name, uflag, 0666)
-	return e
+	var err error
+	f.file, err = os.OpenFile(f.Name, uflag, 0666)
+	return err
 }
 
 func (f *Status) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
