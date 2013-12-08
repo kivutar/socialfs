@@ -34,7 +34,7 @@ type Status struct {
 
 // FIXME check the rsa key instead of the ip
 func isop(fid *srv.FFid) bool {
-	return strings.Contains(fid.Fid.Fconn.Id, "127.0.0.2")
+	return strings.Contains(fid.Fid.Fconn.Id, "127.0.0.1")
 }
 
 func createifnotexist(file *os.File, path string) {
@@ -234,7 +234,7 @@ func main() {
 		return
 	}
 	if _, err := os.Stat("chans"); os.IsNotExist(err) {
-		err = os.Mkdir("chans", os.ModeDir|0655)
+		err = os.Mkdir("chans", os.ModeDir|0777)
 		if err != nil {
 			log.Println(fmt.Sprintf("Error: %s", err))
 			return
