@@ -12,9 +12,17 @@ import (
 	"os"
 	"io"
 	"time"
+	"strings"
 )
 
+/* Append only */
 type Chat struct {
+	srv.File
+	file *os.File
+}
+/* One line file, truncate forced
+Writable by op only */
+type Status struct {
 	srv.File
 	file *os.File
 }
@@ -23,41 +31,42 @@ var addr = flag.String("addr", ":5640", "network address")
 var debug = flag.Bool("d", false, "print debug messages")
 var debugall = flag.Bool("D", false, "print packets as well as debug messages")
 
+var Enotyours = &p.Error{"not yours", p.EPERM}
+
 var s *srv.Fsrv
 
-func omode2uflags(mode uint8) int {
-	ret := int(0)
-	switch mode & 3 {
-	case p.OREAD:
-		ret = os.O_RDONLY
-		break
+// FIXME check the rsa key instead of the ip
+func isop(fid *srv.FFid) bool {
+	return strings.Contains(fid.Fid.Fconn.Id, "127.0.0.2")
+}
 
-	case p.ORDWR:
-		ret = os.O_RDWR
-		break
-
-	case p.OWRITE:
-		ret = os.O_WRONLY
-		break
-
-	case p.OEXEC:
-		ret = os.O_RDONLY
-		break
+func createifnotexist(file *os.File, path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		file, err = os.OpenFile(path, os.O_CREATE, 0666)
+		if err != nil {
+			log.Println(fmt.Sprintf("Error: %s", err))
+			return
+		}
 	}
-
-	if mode&p.OTRUNC != 0 {
-		ret |= os.O_TRUNC
-	}
-
-	return ret
 }
 
 func (f *Chat) Open(fid *srv.FFid, mode uint8) (error) {
 
-	var e error
+	uflag := int(0)
+	switch mode & 3 {
+	case p.OREAD:
+		uflag = os.O_RDONLY
+		break
+	case p.ORDWR:
+		uflag = os.O_RDWR
+		break
+	case p.OWRITE:
+		uflag = os.O_WRONLY
+		break
+	}
 
-	f.file, e = os.OpenFile(f.Name, omode2uflags(mode)|os.O_CREATE, 0666)
-
+	var e
+	f.file, e = os.OpenFile(f.Name, uflag, 0666)
 	return e
 }
 
@@ -98,6 +107,54 @@ func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 	return n2, nil
 }
 
+func (f *Status) Open(fid *srv.FFid, mode uint8) (error) {
+
+	uflag := int(0)
+	switch mode & 3 {
+	case p.OREAD:
+		uflag = os.O_RDONLY
+		break
+	case p.OWRITE:
+		uflag = os.O_WRONLY | os.O_TRUNC
+		break
+	}
+
+	var e
+	f.file, e = os.OpenFile(f.Name, uflag, 0666)
+	return e
+}
+
+func (f *Status) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
+
+	count, e := f.file.ReadAt(buf, int64(offset))
+	if e != nil && e != io.EOF {
+		log.Println(fmt.Sprintf("Error: %s", e))
+	}
+
+	return int(count), nil
+}
+
+func (f *Status) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
+
+	if ! isop(fid) {
+		return len(buf), Enotyours // FIXME
+	}
+
+	n, e2 := f.file.WriteAt(buf, int64(offset))
+	if e2 != nil {
+		log.Println(fmt.Sprintf("Error: %s", e2))
+	}
+
+	st, e := os.Lstat(f.Name)
+	if e != nil {
+		log.Println(fmt.Sprintf("Error: %s", e))
+	}
+	f.Length = uint64(st.Size())
+	f.Mtime = uint32(st.ModTime().Unix())
+
+	return n, nil
+}
+
 func main() {
 	var err error
 
@@ -116,6 +173,7 @@ func main() {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
 	}
+	createifnotexist(public.file, public.Name)
 
 	private := new(Chat)
 	err = private.Add(root, "private", user, nil, 0222, private)
@@ -123,6 +181,15 @@ func main() {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
 	}
+	createifnotexist(private.file, private.Name)
+
+	status := new(Status)
+	err = status.Add(root, "status", user, nil, 0666, status)
+	if err != nil {
+		log.Println(fmt.Sprintf("Error: %s", err))
+		return
+	}
+	createifnotexist(status.file, status.Name)
 
 	s = srv.NewFileSrv(root)
 	s.Dotu = true
