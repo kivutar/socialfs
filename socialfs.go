@@ -13,6 +13,7 @@ import (
 	"io"
 	"time"
 	"strings"
+	"syscall"
 )
 
 /* Append only */
@@ -94,7 +95,35 @@ func (f *Chat) Wstat(fid *srv.FFid, dir *p.Dir) error {
 	}
 
 	if dir.Length != 0xFFFFFFFFFFFFFFFF {
-		//f.trunc(dir.Length)
+		e := os.Truncate(f.path, int64(dir.Length))
+		if e != nil {
+			return e
+		}
+	}
+
+	// If either mtime or atime need to be changed, then
+	// we must change both.
+	if dir.Mtime != ^uint32(0) || dir.Atime != ^uint32(0) {
+		mt, at := time.Unix(int64(dir.Mtime), 0), time.Unix(int64(dir.Atime), 0)
+		if cmt, cat := (dir.Mtime == ^uint32(0)), (dir.Atime == ^uint32(0)); cmt || cat {
+			st, e := os.Stat(f.path)
+			if e != nil {
+				log.Println(fmt.Sprintf("Error: %s", e))
+				return nil
+			}
+			switch cmt {
+			case true:
+				mt = st.ModTime()
+			default:
+				stat := st.Sys().(*syscall.Stat_t)
+				at = time.Unix(stat.Atim.Unix())
+			}
+		}
+		e := os.Chtimes(f.path, at, mt)
+		if e != nil {
+			log.Println(fmt.Sprintf("Error: %s", e))
+			return nil
+		}
 	}
 
 	return nil
@@ -113,6 +142,13 @@ func (f *Chat) Open(fid *srv.FFid, mode uint8) (error) {
 	case p.OWRITE:
 		uflag = os.O_WRONLY
 		break
+	case p.OEXEC:
+		uflag = os.O_RDONLY
+		break
+	}
+
+	if mode&p.OTRUNC != 0 {
+		uflag |= os.O_TRUNC
 	}
 
 	var err error
@@ -127,12 +163,66 @@ func (f *Chat) Read(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 		log.Println(fmt.Sprintf("Error: %s", e))
 	}
 
-	return int(count), nil
+	return count, nil
+}
+
+func dir2Qid(d os.FileInfo) *p.Qid {
+	var qid p.Qid
+
+	qid.Path = d.Sys().(*syscall.Stat_t).Ino
+	qid.Version = uint32(d.ModTime().UnixNano() / 1000000)
+	qid.Type = dir2QidType(d)
+
+	return &qid
+}
+
+func dir2QidType(d os.FileInfo) uint8 {
+	ret := uint8(0)
+	if d.IsDir() {
+		ret |= p.QTDIR
+	}
+
+	if d.Mode()&os.ModeSymlink != 0 {
+		ret |= p.QTSYMLINK
+	}
+
+	return ret
+}
+
+func atime(stat *syscall.Stat_t) time.Time {
+	return time.Unix(stat.Atim.Unix())
+}
+
+func dir2Npmode(d os.FileInfo, dotu bool) uint32 {
+	ret := uint32(d.Mode() & 0777)
+	if d.IsDir() {
+		ret |= p.DMDIR
+	}
+
+	return ret
+}
+
+func (f *Chat) Stat(fid *srv.FFid) (error) {
+
+	st, e := os.Lstat(f.path)
+	if e != nil {
+		log.Println(fmt.Sprintf("Error: %s", e))
+	}
+
+	sysMode := st.Sys().(*syscall.Stat_t)
+
+	f.Qid = *dir2Qid(st)
+	f.Mode = dir2Npmode(st, true)
+	f.Atime = uint32(atime(sysMode).Unix())
+	f.Mtime = uint32(st.ModTime().Unix())
+	f.Length = uint64(st.Size())
+
+	return nil
 }
 
 func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 
-	ind := []byte(time.Now().Format(time.RFC3339))
+	/*ind := []byte(time.Now().Format(time.RFC3339))
 	ind = append(ind, " "...)
 	ind = append(ind, fid.Fid.Fconn.Id...)
 	ind = append(ind, " → "...)
@@ -140,19 +230,13 @@ func (f *Chat) Write(fid *srv.FFid, buf []byte, offset uint64) (int, error) {
 	n1, e1 := f.file.WriteAt(ind, int64(offset))
 	if e1 != nil {
 		log.Println(fmt.Sprintf("Error: %s", e1))
-	}
+	}*/
 
-	n2, e2 := f.file.WriteAt(buf, int64(offset) + int64(n1))
+	//n2, e2 := f.file.WriteAt(buf, int64(offset) + int64(n1))
+	n2, e2 := f.file.WriteAt(buf, int64(offset))
 	if e2 != nil {
 		log.Println(fmt.Sprintf("Error: %s", e2))
 	}
-
-	st, e := os.Lstat(f.path)
-	if e != nil {
-		log.Println(fmt.Sprintf("Error: %s", e))
-	}
-	f.Length = uint64(st.Size())
-	f.Mtime = uint32(st.ModTime().Unix())
 
 	return n2, nil
 }
@@ -292,7 +376,7 @@ func main() {
 	}
 
 	/*certpool := x509.NewCertPool()
-	pem, err := ioutil.ReadFile("client.crt")
+	pem, err := ioutil.ReadFile("ca.crt.pem")
 	success := certpool.AppendCertsFromPEM(pem)
 
 	if ! success {
@@ -300,7 +384,7 @@ func main() {
 		return
 	}
 
-	cert, err := tls.LoadX509KeyPair("test.crt.pem", "test.key.pem")
+	cert, err := tls.LoadX509KeyPair("server.crt.pem", "server.key.pem")
 	if err != nil {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
@@ -309,8 +393,9 @@ func main() {
 	ls, oerr := tls.Listen("tcp", *addr, &tls.Config{
 		//Rand:               rand.Reader,
 		Certificates:       []tls.Certificate{cert},
-		CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
-		ClientAuth:         tls.RequireAndVerifyClientCert,
+		//CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
+		CipherSuites:       []uint16{tls.TLS_RSA_WITH_AES_256_CBC_SHA},
+		//ClientAuth:         tls.RequireAndVerifyClientCert,
 		ClientCAs:          certpool,
 		InsecureSkipVerify: false,
 		//PreferServerCipherSuites: true,

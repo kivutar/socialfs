@@ -15,7 +15,7 @@ import (
 )
 
 var debuglevel = flag.Int("d", 0, "debuglevel")
-var addr = flag.String("addr", "localhost:5640", "network address")
+var addr = flag.String("addr", ":5640", "network address")
 
 func main() {
 	var user p.User
@@ -26,14 +26,14 @@ func main() {
 	clnt.DefaultDebuglevel = *debuglevel
 
 	certpool := x509.NewCertPool()
-	pem, err := ioutil.ReadFile("server.crt")
+	pem, err := ioutil.ReadFile("ca.crt.pem")
 	success := certpool.AppendCertsFromPEM(pem)
 	if ! success {
 		log.Println("can't parse cert pool")
 		return
 	}
 
-	cert, err := tls.LoadX509KeyPair("client.crt", "client.key")
+	cert, err := tls.LoadX509KeyPair("client.crt.pem", "client.key.pem")
 	if err != nil {
 		log.Println(fmt.Sprintf("Error: %s", err))
 		return
@@ -43,7 +43,7 @@ func main() {
 		ServerName:         "localhost",
 		Rand:               rand.Reader,
 		Certificates:       []tls.Certificate{cert},
-		CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA},
+		CipherSuites:       []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
 		RootCAs:            certpool,
 		InsecureSkipVerify: false,
 	})
